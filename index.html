@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login E-Rapot</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+        }
+        .login-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h2 { color: #2c3e50; margin-bottom: 1.5rem; }
+        select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background-color: #2980b9; }
+        .loading { color: #7f8c8d; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <h2>🏫 Masuk E-Rapot</h2>
+        <p style="color:#666; margin-bottom: 20px;">Silakan pilih nama Anda untuk masuk</p>
+        
+        <select id="guruSelect">
+            <option value="">-- Memuat Data Guru... --</option>
+        </select>
+
+        <button onclick="masukAplikasi()">Masuk Aplikasi</button>
+        
+        <br><br>
+        <small><a href="legger.html" style="color:#999; text-decoration:none;">Lihat Legger (Wali Kelas)</a></small>
+    </div>
+
+    <script>
+        // --- 1. KONFIGURASI SUPABASE ---
+        // PENTING: GANTI DENGAN URL & KEY PROYEK ANDA SENDIRI
+        const supabaseUrl = 'MASUKKAN_SUPABASE_URL_ANDA'
+        const supabaseKey = 'MASUKKAN_SUPABASE_ANON_KEY_ANDA'
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey)
+
+        // --- 2. FUNGSI AMBIL DATA GURU ---
+        async function loadGuru() {
+            const selectEl = document.getElementById('guruSelect')
+            
+            // Mengambil data dari tabel 'guru'
+            const { data, error } = await supabase
+                .from('guru')
+                .select('*')
+                .order('nama_lengkap', { ascending: true })
+
+            if (error) {
+                alert('Gagal mengambil data guru: ' + error.message)
+                return
+            }
+
+            // Reset dropdown
+            selectEl.innerHTML = '<option value="">-- Pilih Nama Anda --</option>'
+
+            // Masukkan data ke dropdown
+            data.forEach(guru => {
+                const option = document.createElement('option')
+                option.value = guru.id
+                option.text = guru.nama_lengkap + (guru.nip ? ` (NIP: ${guru.nip})` : '')
+                selectEl.appendChild(option)
+            })
+        }
+
+        // --- 3. FUNGSI LOGIN (SIMPAN SESI) ---
+        function masukAplikasi() {
+            const selectEl = document.getElementById('guruSelect')
+            const guruId = selectEl.value
+            const guruNama = selectEl.options[selectEl.selectedIndex].text
+
+            if (!guruId) {
+                alert("Mohon pilih nama guru terlebih dahulu!")
+                return
+            }
+
+            // Simpan ID dan Nama ke LocalStorage browser
+            // Agar halaman selanjutnya tahu siapa yang sedang login
+            localStorage.setItem('guru_id', guruId)
+            localStorage.setItem('guru_nama', guruNama)
+
+            // Pindah ke halaman input
+            window.location.href = 'input.html'
+        }
+
+        // Jalankan saat halaman dibuka
+        loadGuru()
+    </script>
+
+</body>
+</html>
