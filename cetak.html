@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cetak Rapot - Pesantren Style</title>
+
+    <meta name="google" content="notranslate">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* SETUP KERTAS A4 */
+        @page { size: A4; margin: 1cm; }
+        body {
+            font-family: 'Traditional Arabic', 'Amiri', serif; /* Font nuansa Arab */
+            margin: 0;
+            padding: 20px;
+            background: white;
+            color: #000;
+        }
+
+        /* HEADER */
+        .header { text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 28px; font-weight: bold; }
+        .header h2 { margin: 5px 0; font-size: 20px; font-weight: normal; }
+
+        /* BIODATA SISWA */
+        .biodata { width: 100%; margin-bottom: 20px; font-size: 16px; font-weight: bold; }
+        .biodata td { padding: 5px; }
+
+        /* TABEL NILAI */
+        .category-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 20px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #000;
+            display: inline-block;
+        }
+
+        table.nilai {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        table.nilai th, table.nilai td {
+            border: 1px solid #000;
+            padding: 4px 8px;
+            text-align: center;
+        }
+        table.nilai th { background-color: #f0f0f0; font-weight: bold; }
+        
+        /* Kolom Mapel Rata Kanan */
+        table.nilai td.col-mapel { text-align: right; width: 40%; }
+        
+        /* FOOTER TANDA TANGAN */
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
+        .ttd-box { width: 30%; }
+        .ttd-line { margin-top: 60px; border-bottom: 1px solid #000; }
+
+        /* TOMBOL PRINT (Hilang saat diprint) */
+        .no-print {
+            position: fixed; top: 20px; left: 20px; 
+            background: #27ae60; color: white; padding: 10px 20px; 
+            border: none; cursor: pointer; font-family: sans-serif;
+        }
+        @media print { .no-print { display: none; } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <button class="no-print" onclick="window.print()">🖨️ Cetak / Save PDF</button>
+
+    <div class="header">
+        <h1>معهد حسن الخاتمة الإسلامي</h1>
+        <h2>PONDOK PESANTREN HUSNUL KHOTIMAH</h2>
+        <p>Tahun Ajaran ٢٠٢٥ / ٢٠٢٦ | Semester Ganjil</p>
+    </div>
+
+    <table class="biodata">
+        <tr>
+            <td width="15%">Nama</td>
+            <td width="2%">:</td>
+            <td id="namaSiswa" style="text-align: right;">Loading...</td>
+            <td width="10%">Kelas</td>
+            <td width="2%">:</td>
+            <td id="kelasSiswa">10A</td>
+        </tr>
+        <tr>
+            <td>NIS</td>
+            <td>:</td>
+            <td id="nisnSiswa">-</td>
+            <td>Halaman</td>
+            <td>:</td>
+            <td>1</td>
+        </tr>
+    </table>
+
+    <div id="contentArea">
+        <p style="text-align:center;">Memuat data nilai...</p>
+    </div>
+
+    <table class="nilai" style="margin-top: 20px; width: 50%; margin-right: auto;">
+        <tr>
+            <th width="50%">المجموع (Jumlah)</th>
+            <td id="totalNilai">-</td>
+        </tr>
+        <tr>
+            <th>المعدل (Rata-rata)</th>
+            <td id="rataNilai">-</td>
+        </tr>
+    </table>
+
+    <div class="footer">
+        <div class="ttd-box">
+            <p>Wali Kelas</p>
+            <div class="ttd-line"></div>
+            <p id="waliKelas">...</p>
+        </div>
+        <div class="ttd-box">
+            <p>Mudir Ma'had</p>
+            <div class="ttd-line"></div>
+            <p>KH. Mudir, Lc.</p>
+        </div>
+        <div class="ttd-box">
+            <p>Orang Tua / Wali</p>
+            <div class="ttd-line"></div>
+            <p>.........................</p>
+        </div>
+    </div>
+
+    <script>
+        const supabaseUrl = 'https://mpimmgzdwfwvfhefsixr.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1waW1tZ3pkd2Z3dmZoZWZzaXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTIzNzksImV4cCI6MjA4MzQyODM3OX0.EGneJjR7IWEyrq8s0mWd5mR9B9B73G5jWyadEY4oHgk'
+        const db = supabase.createClient(supabaseUrl, supabaseKey)
+
+        // Ambil ID Siswa dari URL (contoh: cetak.html?siswa_id=1)
+        const params = new URLSearchParams(window.location.search);
+        const siswaId = params.get('siswa_id'); 
+
+        // --- KAMUS ANGKA ARAB (0-100) ---
+        // Ini versi sederhana untuk demo. Idealnya pakai library 'n2words' tapi kita buat manual saja yg umum.
+        const satuan = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
+        const satuanGabung = ["", "واحد", "اثنان", "ثلاث", "أربع", "خمس", "ست", "سبع", "ثمان", "تسع"]; // Untuk digabung dgn puluhan
+        const belasan = ["عشر", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
+        const puluhan = ["", "عشرة", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+
+        function angkaKeTeksArab(n) {
+            n = parseInt(n);
+            if (n == 100) return "مائة";
+            if (n == 0) return "صفر";
+            
+            if (n < 10) return satuan[n];
+            if (n >= 10 && n < 20) return belasan[n - 10];
+            
+            let s = n % 10;
+            let p = Math.floor(n / 10);
+            
+            if (s === 0) return puluhan[p];
+            return satuanGabung[s] + " و" + puluhan[p];
+        }
+
+        // Konversi angka latin ke angka Arab (88 -> ۸۸)
+        function toArabicNumerals(n) {
+            return n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+        }
+
+        async function loadRapot() {
+            if (!siswaId) return alert("Error: ID Siswa tidak ditemukan di URL.");
+
+            // 1. Ambil Data Siswa
+            let { data: siswa } = await db.from('siswa').select('*').eq('id', siswaId).single();
+            if (siswa) {
+                document.getElementById('namaSiswa').innerText = siswa.nama;
+                document.getElementById('kelasSiswa').innerText = siswa.kelas;
+                document.getElementById('nisnSiswa').innerText = siswa.nisn || '-';
+            }
+
+            // 2. Ambil Nilai & Mapel
+            let { data: nilais } = await db
+                .from('nilai')
+                .select(`
+                    nilai_akhir,
+                    mapel ( nama_mapel, nama_arab, kategori, kkm )
+                `)
+                .eq('siswa_id', siswaId);
+
+            if (!nilais) return;
+
+            // 3. Render Tabel Berdasarkan Kategori
+            const categories = [
+                { id: 'Lisan', title: 'الامتحان الشفوي (Ujian Lisan)' },
+                { id: 'Tulis', title: 'الامتحان التحريري (Ujian Tulis)' },
+                { id: 'Tahfidz', title: 'التحفيظ (Tahfidz & Tahsin)' }
+            ];
+
+            let htmlContent = '';
+            let totalSemua = 0;
+            let jumlahMapel = 0;
+
+            categories.forEach(cat => {
+                // Filter nilai sesuai kategori ini
+                let listNilai = nilais.filter(n => n.mapel.kategori === cat.id);
+                
+                if (listNilai.length > 0) {
+                    htmlContent += `<div class="category-title">${cat.title}</div>`;
+                    htmlContent += `
+                    <table class="nilai">
+                        <thead>
+                            <tr>
+                                <th width="5%">No</th>
+                                <th width="35%">Mata Pelajaran <br> المواد الدراسية</th>
+                                <th width="10%">KKM</th>
+                                <th width="10%">Nilai <br> الرقم</th>
+                                <th>Terbilang <br> كتابة</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                    
+                    listNilai.forEach((item, index) => {
+                        let nilai = Math.round(item.nilai_akhir);
+                        let teksArab = angkaKeTeksArab(nilai);
+                        let angkaArab = toArabicNumerals(nilai);
+                        let kkm = item.mapel.kkm || 75;
+                        
+                        totalSemua += parseFloat(item.nilai_akhir);
+                        jumlahMapel++;
+
+                        htmlContent += `
+                        <tr>
+                            <td>${toArabicNumerals(index + 1)}</td>
+                            <td class="col-mapel">
+                                <span style="float:left; font-size:12px;">${item.mapel.nama_mapel}</span>
+                                <b>${item.mapel.nama_arab}</b>
+                            </td>
+                            <td>${toArabicNumerals(kkm)}</td>
+                            <td style="font-weight:bold;">${angkaArab}</td>
+                            <td>${teksArab}</td>
+                        </tr>`;
+                    });
+
+                    htmlContent += `</tbody></table>`;
+                }
+            });
+
+            document.getElementById('contentArea').innerHTML = htmlContent;
+
+            // Hitung Total & Rata-rata
+            if (jumlahMapel > 0) {
+                let rata = (totalSemua / jumlahMapel).toFixed(2);
+                document.getElementById('totalNilai').innerText = toArabicNumerals(Math.round(totalSemua));
+                document.getElementById('rataNilai').innerText = toArabicNumerals(rata);
+            }
+        }
+
+        loadRapot();
+    </script>
+</body>
+</html>

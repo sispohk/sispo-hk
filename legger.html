@@ -112,9 +112,14 @@
                 let tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50 transition";
                 
+                // Tambahkan tombol ikon printer di sebelah nama
                 let html = `<td class="px-6 py-4 text-center text-gray-500">${index + 1}</td>
-                            <td class="px-6 py-4 font-medium text-gray-900">${siswa.nama}</td>`;
-                
+                            <td class="px-6 py-4 font-medium text-gray-900 flex justify-between items-center">
+                                ${siswa.nama}
+                                <a href="cetak.html?siswa_id=${siswa.id}" target="_blank" class="text-gray-400 hover:text-blue-600" title="Cetak Rapot">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                                </a>
+                            </td>`;
                 let totalNilai = 0, jumlahMapel = 0;
 
                 mapels.forEach(mapel => {
