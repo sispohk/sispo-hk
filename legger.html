@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legger Wali Kelas - E-Rapot</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f8f9fa; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        .btn-back { display: inline-block; margin-bottom: 15px; text-decoration: none; color: #555; font-weight: bold; }
+        .btn-print { float: right; background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: center; }
+        th { background-color: #343a40; color: white; text-transform: uppercase; letter-spacing: 1px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        tr:hover { background-color: #e9ecef; }
+        
+        /* Warna untuk nilai kosong/kurang */
+        .kosong { color: #e74c3c; font-weight: bold; background: #fde8e8; }
+        .nama-siswa { text-align: left; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <a href="index.html" class="btn-back">⬅ Kembali ke Login</a>
+    <button class="btn-print" onclick="exportLegger()">🖨️ Download Excel</button>
+    
+    <h2>📊 Legger Nilai Kelas 10A</h2>
+    <p>Berikut adalah rekapitulasi nilai akhir dari seluruh mata pelajaran.</p>
+
+    <div style="overflow-x: auto;">
+        <table id="leggerTable">
+            <thead>
+                <tr id="tableHeader">
+                    <th>No</th>
+                    <th>Nama Siswa</th>
+                    </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="5">Sedang memuat data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- 1. SETUP DATABASE ---
+    const supabaseUrl = 'https://mpimmgzdwfwvfhefsixr.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1waW1tZ3pkd2Z3dmZoZWZzaXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTIzNzksImV4cCI6MjA4MzQyODM3OX0.EGneJjR7IWEyrq8s0mWd5mR9B9B73G5jWyadEY4oHgk'
+    const db = supabase.createClient(supabaseUrl, supabaseKey)
+
+    async function loadLegger() {
+        // 1. Ambil Data Referensi (Siswa & Mapel)
+        // Kita kunci ke Kelas 10A dulu
+        const { data: siswas } = await db.from('siswa').select('*').eq('kelas', '10A').order('nama');
+        const { data: mapels } = await db.from('mapel').select('*').order('id');
+        
+        // 2. Ambil Semua Nilai untuk kelas ini
+        // Kita butuh join tabel nilai dengan mapel agar tahu nilai ini punya mapel apa
+        const { data: nilais } = await db.from('nilai')
+            .select('siswa_id, mapel_id, nilai_akhir');
+
+        // --- RENDER HEADER TABEL (JUDUL MAPEL) ---
+        const headerRow = document.getElementById('tableHeader');
+        mapels.forEach(m => {
+            let th = document.createElement('th');
+            th.innerText = m.nama_mapel;
+            headerRow.appendChild(th);
+        });
+        
+        // Tambah Kolom Rata-rata Total (Opsional)
+        let thRata = document.createElement('th');
+        thRata.innerText = "RERATA";
+        thRata.style.backgroundColor = "#2980b9";
+        headerRow.appendChild(thRata);
+
+
+        // --- RENDER ISI TABEL (MATRIX) ---
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = ''; // Hapus loading
+
+        siswas.forEach((siswa, index) => {
+            let tr = document.createElement('tr');
+            
+            // Kolom No & Nama
+            let html = `<td>${index + 1}</td><td class="nama-siswa">${siswa.nama}</td>`;
+            
+            let totalNilai = 0;
+            let jumlahMapel = 0;
+
+            // Loop setiap Mapel (Mencari nilai siswa ini di mapel tersebut)
+            mapels.forEach(mapel => {
+                // Cari data nilai yang cocok (Siswa ID sama AND Mapel ID sama)
+                const nilaiData = nilais.find(n => n.siswa_id == siswa.id && n.mapel_id == mapel.id);
+                
+                let angka = nilaiData ? nilaiData.nilai_akhir : null;
+                
+                if (angka !== null) {
+                    html += `<td>${angka}</td>`;
+                    totalNilai += parseFloat(angka);
+                    jumlahMapel++;
+                } else {
+                    html += `<td class="kosong">-</td>`; // Nilai belum diinput
+                }
+            });
+
+            // Hitung Rerata Total Siswa
+            let rerataAkhir = jumlahMapel > 0 ? (totalNilai / jumlahMapel).toFixed(2) : "0.00";
+            html += `<td style="font-weight:bold;">${rerataAkhir}</td>`;
+
+            tr.innerHTML = html;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function exportLegger() {
+        var table = document.getElementById("leggerTable");
+        var wb = XLSX.utils.table_to_book(table);
+        XLSX.writeFile(wb, "Legger_Kelas_10A.xlsx");
+    }
+
+    loadLegger();
+</script>
+
+</body>
+</html>

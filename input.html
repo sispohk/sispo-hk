@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Nilai - E-Rapot</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f5f6fa; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        
+        button { padding: 10px; cursor: pointer; border: none; border-radius: 4px; color: white; font-weight: bold; }
+        .btn-green { background: #27ae60; } /* Excel Download */
+        .btn-blue { background: #2980b9; }  /* Upload/Simpan */
+        .btn-red { background: #c0392b; }   /* Logout */
+        
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #34495e; color: white; }
+        input[type="number"] { width: 50px; text-align: center; border: 1px solid #ccc; padding: 4px; }
+        
+        /* Highlight Nilai Akhir */
+        .nilai-akhir { font-weight: bold; color: #2c3e50; background-color: #ecf0f1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2 id="welcomeMsg">👋 Halo, Guru</h2>
+        <button class="btn-red" onclick="logout()">Keluar</button>
+    </div>
+
+    <div class="controls">
+        <select id="mapelSelect" onchange="loadData()">
+            <option value="">-- Pilih Mapel --</option>
+        </select>
+        
+        <button class="btn-green" onclick="downloadTemplate()">⬇️ Download Template Excel</button>
+        <button class="btn-blue" onclick="document.getElementById('fileExcel').click()">⬆️ Import Excel</button>
+        <input type="file" id="fileExcel" hidden onchange="importExcel(this)">
+    </div>
+
+    <table id="nilaiTable">
+        <thead>
+            <tr>
+                <th>Nama Siswa</th>
+                <th>Hadir (0-100)</th>
+                <th>Tugas</th>
+                <th>UH 1</th>
+                <th>UH 2</th>
+                <th>UH 3</th>
+                <th>PAS</th>
+                <th>Nilai Akhir</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td colspan="8">Silakan pilih Mapel terlebih dahulu...</td></tr>
+        </tbody>
+    </table>
+
+    <br>
+    <button class="btn-blue" style="width: 100%; font-size: 16px;" onclick="simpanKeDatabase()">💾 SIMPAN SEMUA NILAI KE DATABASE</button>
+</div>
+
+<script>
+    // --- 1. SETUP DATABASE ---
+    const supabaseUrl = 'https://mpimmgzdwfwvfhefsixr.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1waW1tZ3pkd2Z3dmZoZWZzaXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTIzNzksImV4cCI6MjA4MzQyODM3OX0.EGneJjR7IWEyrq8s0mWd5mR9B9B73G5jWyadEY4oHgk'
+    const db = supabase.createClient(supabaseUrl, supabaseKey)
+
+    // Data Global
+    let currentSiswa = [] // Menyimpan data siswa kelas 10A
+    let currentGuruId = localStorage.getItem('guru_id')
+
+    // --- 2. CEK LOGIN & LOAD AWAL ---
+    async function init() {
+        if (!currentGuruId) {
+            alert("Anda belum login!");
+            window.location.href = 'index.html';
+            return;
+        }
+        document.getElementById('welcomeMsg').innerText = "👋 Halo, " + localStorage.getItem('guru_nama');
+
+        // Ambil Data Mapel
+        let { data: mapels } = await db.from('mapel').select('*');
+        let htmlMapel = '<option value="">-- Pilih Mapel --</option>';
+        mapels.forEach(m => htmlMapel += `<option value="${m.id}">${m.nama_mapel}</option>`);
+        document.getElementById('mapelSelect').innerHTML = htmlMapel;
+
+        // Ambil Data Siswa (Kita asumsikan Kelas 10A dulu sesuai request)
+        let { data: siswas } = await db.from('siswa').select('*').eq('kelas', '10A').order('nama');
+        currentSiswa = siswas;
+    }
+
+    // --- 3. LOAD DATA NILAI (Jika sudah ada di DB) ---
+    async function loadData() {
+        const mapelId = document.getElementById('mapelSelect').value;
+        const tbody = document.querySelector('#nilaiTable tbody');
+        
+        if (!mapelId) {
+            tbody.innerHTML = '<tr><td colspan="8">Pilih Mapel dulu...</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="8">Memuat data...</td></tr>';
+
+        // Ambil nilai yg sudah tersimpan (jika ada)
+        let { data: nilais } = await db.from('nilai')
+            .select('*')
+            .eq('mapel_id', mapelId)
+            .eq('guru_id', currentGuruId);
+
+        // Render Baris Tabel untuk Setiap Siswa
+        let html = '';
+        currentSiswa.forEach(siswa => {
+            // Cek apakah siswa ini sudah punya nilai di DB?
+            let nilai = nilais.find(n => n.siswa_id == siswa.id) || {};
+
+            // Helper function biar gak nulis 'undefined' kalo kosong
+            const val = (v) => v !== undefined && v !== null ? v : '';
+
+            html += `
+            <tr data-siswa-id="${siswa.id}">
+                <td style="text-align:left;">${siswa.nama}</td>
+                <td><input type="number" class="inp-hadir" value="${val(nilai.kehadiran)}" oninput="hitungRow(this)"></td>
+                <td><input type="number" class="inp-tugas" value="${val(nilai.tugas)}" oninput="hitungRow(this)"></td>
+                <td><input type="number" class="inp-uh1" value="${val(nilai.uh1)}" oninput="hitungRow(this)"></td>
+                <td><input type="number" class="inp-uh2" value="${val(nilai.uh2)}" oninput="hitungRow(this)"></td>
+                <td><input type="number" class="inp-uh3" value="${val(nilai.uh3)}" oninput="hitungRow(this)"></td>
+                <td><input type="number" class="inp-pas" value="${val(nilai.pas_pat)}" oninput="hitungRow(this)"></td>
+                <td class="nilai-akhir">${val(nilai.nilai_akhir)}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+        
+        // Hitung ulang semua baris (biar tampilan awal sinkron)
+        document.querySelectorAll('tr[data-siswa-id]').forEach(row => hitungRow(row.querySelector('input')));
+    }
+
+    // --- 4. RUMUS HITUNG (LOGIKA 10:20:40:30) ---
+    function hitungRow(element) {
+        let row = element.closest('tr');
+        
+        // Ambil nilai dari input (kalau kosong dianggap 0)
+        let hadir = parseFloat(row.querySelector('.inp-hadir').value) || 0;
+        let tugas = parseFloat(row.querySelector('.inp-tugas').value) || 0;
+        let uh1 = parseFloat(row.querySelector('.inp-uh1').value) || 0;
+        let uh2 = parseFloat(row.querySelector('.inp-uh2').value) || 0;
+        let uh3 = parseFloat(row.querySelector('.inp-uh3').value) || 0;
+        let pas = parseFloat(row.querySelector('.inp-pas').value) || 0;
+
+        // Hitung Rata-rata UH (dari yang diisi saja, atau dibagi 3? Sesuai request 'rerata uh')
+        // Disini kita anggap dibagi 3 slot UH agar adil, atau mau dibagi jumlah yg diisi?
+        // Untuk simpelnya, kita rata-rata dari 3 slot tersebut:
+        let rataUh = (uh1 + uh2 + uh3) / 3; 
+        
+        // Rumus: 10% Hadir + 20% Tugas + 40% UH + 30% PAS
+        let akhir = (hadir * 0.1) + (tugas * 0.2) + (rataUh * 0.4) + (pas * 0.3);
+
+        // Tampilkan 2 desimal
+        row.querySelector('.nilai-akhir').innerText = akhir.toFixed(2);
+    }
+
+    // --- 5. FITUR DOWNLOAD TEMPLATE EXCEL ---
+    function downloadTemplate() {
+        if (!document.getElementById('mapelSelect').value) return alert("Pilih Mapel dulu!");
+        
+        // Buat data JSON untuk Excel
+        let dataExcel = currentSiswa.map(s => ({
+            "ID_SISTEM": s.id, // PENTING: Jangan dihapus saat di Excel
+            "NAMA_SISWA": s.nama,
+            "KEHADIRAN": 0,
+            "TUGAS": 0,
+            "UH1": 0, "UH2": 0, "UH3": 0,
+            "PAS": 0
+        }));
+
+        // Buat Worksheet
+        let ws = XLSX.utils.json_to_sheet(dataExcel);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Nilai");
+
+        // Download file
+        XLSX.writeFile(wb, "Template_Nilai_10A.xlsx");
+    }
+
+    // --- 6. FITUR IMPORT EXCEL ---
+    function importExcel(input) {
+        let file = input.files[0];
+        if (!file) return;
+
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            let data = new Uint8Array(e.target.result);
+            let workbook = XLSX.read(data, {type: 'array'});
+            let sheetName = workbook.SheetNames[0];
+            let sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+            // Masukkan data excel ke Tabel HTML
+            sheetData.forEach(row => {
+                // Cari baris tabel HTML berdasarkan ID Siswa
+                let tr = document.querySelector(`tr[data-siswa-id="${row.ID_SISTEM}"]`);
+                if (tr) {
+                    tr.querySelector('.inp-hadir').value = row.KEHADIRAN || 0;
+                    tr.querySelector('.inp-tugas').value = row.TUGAS || 0;
+                    tr.querySelector('.inp-uh1').value = row.UH1 || 0;
+                    tr.querySelector('.inp-uh2').value = row.UH2 || 0;
+                    tr.querySelector('.inp-uh3').value = row.UH3 || 0;
+                    tr.querySelector('.inp-pas').value = row.PAS || 0;
+                    
+                    // Hitung ulang nilai akhirnya
+                    hitungRow(tr.querySelector('input'));
+                }
+            });
+            alert("Data Excel berhasil dimuat! Cek tabel, lalu klik SIMPAN.");
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // --- 7. SIMPAN KE SUPABASE ---
+    async function simpanKeDatabase() {
+        const mapelId = document.getElementById('mapelSelect').value;
+        if (!mapelId) return alert("Pilih Mapel dulu!");
+
+        let rows = document.querySelectorAll('tr[data-siswa-id]');
+        let dataToUpsert = [];
+
+        rows.forEach(row => {
+            dataToUpsert.push({
+                siswa_id: row.getAttribute('data-siswa-id'),
+                mapel_id: mapelId,
+                guru_id: currentGuruId,
+                kehadiran: row.querySelector('.inp-hadir').value,
+                tugas: row.querySelector('.inp-tugas').value,
+                uh1: row.querySelector('.inp-uh1').value,
+                uh2: row.querySelector('.inp-uh2').value,
+                uh3: row.querySelector('.inp-uh3').value,
+                pas_pat: row.querySelector('.inp-pas').value,
+                nilai_akhir: row.querySelector('.nilai-akhir').innerText
+            });
+        });
+
+        // Proses Simpan (Upsert: Update jika ada, Insert jika baru)
+        // Kita butuh unique constraint sebenarnya, tapi untuk simpel kita delete dulu yg lama utk mapel/siswa ini (cara "barbar" tapi efektif buat pemula)
+        // Cara "Barbar": Hapus nilai lama kelas ini di mapel ini, lalu insert baru.
+        
+        // 1. Hapus data lama (opsional, biar gak duplikat)
+        await db.from('nilai').delete().eq('mapel_id', mapelId).eq('guru_id', currentGuruId).in('siswa_id', currentSiswa.map(s=>s.id));
+
+        // 2. Insert data baru
+        const { error } = await db.from('nilai').insert(dataToUpsert);
+
+        if (error) alert("Error: " + error.message);
+        else alert("✅ BERHASIL! Semua nilai tersimpan.");
+    }
+
+    function logout() {
+        localStorage.clear();
+        window.location.href = 'index.html';
+    }
+
+    init();
+</script>
+
+</body>
+</html>
