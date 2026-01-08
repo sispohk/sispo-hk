@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - E-Rapot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex">
+
+    <aside class="w-64 bg-slate-900 text-white flex-col hidden md:flex shadow-2xl">
+        <div class="p-6 border-b border-slate-800">
+            <h2 class="text-xl font-bold">Admin Panel</h2>
+            <p class="text-slate-400 text-xs mt-1">Master Data Management</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="switchTab('siswa')" id="navSiswa" class="nav-btn bg-blue-600">👤 Data Siswa</button>
+            <button onclick="switchTab('mapel')" id="navMapel" class="nav-btn text-slate-400">📚 Data Mapel</button>
+            <button onclick="switchTab('guru')" id="navGuru" class="nav-btn text-slate-400">👨‍🏫 Data Guru</button>
+        </nav>
+        <div class="p-4"><a href="index.html" class="block text-center text-red-400 hover:text-red-300 text-sm">Keluar</a></div>
+    </aside>
+
+    <main class="flex-1 p-8 overflow-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 id="pageTitle" class="text-2xl font-bold text-slate-800">Data Siswa</h1>
+            <button onclick="openModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2">
+                <span class="text-xl font-bold">+</span> Tambah Data
+            </button>
+        </div>
+
+        <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Cari data..." class="w-full mb-4 p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none">
+
+        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50 text-slate-500 uppercase text-xs">
+                    <tr id="tableHeader"></tr>
+                </thead>
+                <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="modalAdd" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-96 p-6 animate-fade-in">
+            <h3 class="text-lg font-bold mb-4" id="modalTitle">Tambah Data</h3>
+            <div id="modalForm" class="space-y-3">
+                </div>
+            <div class="mt-6 flex gap-3">
+                <button onclick="closeModal()" class="w-1/2 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg">Batal</button>
+                <button onclick="saveData()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .nav-btn { width: 100%; text-align: left; padding: 12px 16px; rounded-lg: 8px; transition: all 0.2s; font-weight: 500; display: flex; gap: 10px; }
+        .nav-btn.active { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .nav-btn:not(.active):hover { background-color: #1e293b; color: white; }
+    </style>
+
+    <script>
+        const supabaseUrl = 'MASUKKAN_SUPABASE_URL_ANDA'
+        const supabaseKey = 'MASUKKAN_SUPABASE_ANON_KEY_ANDA'
+        const db = supabase.createClient(supabaseUrl, supabaseKey)
+
+        let activeTab = 'siswa';
+        let currentData = [];
+
+        // --- 1. SWITCH TABS ---
+        function switchTab(tab) {
+            activeTab = tab;
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                b.classList.remove('active', 'bg-blue-600', 'text-white');
+                b.classList.add('text-slate-400');
+            });
+            document.getElementById('nav' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active', 'bg-blue-600', 'text-white');
+            document.getElementById('nav' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('text-slate-400');
+            
+            document.getElementById('pageTitle').innerText = tab === 'siswa' ? 'Data Siswa' : (tab === 'mapel' ? 'Data Mapel' : 'Data Guru');
+            loadTable();
+        }
+
+        // --- 2. LOAD TABLE DATA ---
+        async function loadTable() {
+            document.getElementById('tableBody').innerHTML = '<tr><td colspan="5" class="p-6 text-center">Loading...</td></tr>';
+            
+            let query = db.from(activeTab).select('*').order('id');
+            if(activeTab === 'siswa') query = query.order('nama');
+            
+            const { data, error } = await query;
+            if(error) return alert(error.message);
+            currentData = data;
+            renderTable(data);
+        }
+
+        function renderTable(data) {
+            const thead = document.getElementById('tableHeader');
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            if(activeTab === 'siswa') {
+                thead.innerHTML = '<th class="p-4">Nama</th><th class="p-4">NISN</th><th class="p-4">Kelas</th><th class="p-4 text-center">Aksi</th>';
+                data.forEach(Row => {
+                    tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4 font-medium">${Row.nama}</td>
+                        <td class="p-4 text-slate-500">${Row.nisn || '-'}</td>
+                        <td class="p-4"><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">${Row.kelas}</span></td>
+                        <td class="p-4 text-center"><button onclick="deleteData(${Row.id})" class="text-red-500 hover:text-red-700 font-bold">Hapus</button></td>
+                    </tr>`;
+                });
+            } else if(activeTab === 'mapel') {
+                thead.innerHTML = '<th class="p-4">Nama Mapel</th><th class="p-4 text-right">Nama Arab</th><th class="p-4">Kategori</th><th class="p-4 text-center">Aksi</th>';
+                data.forEach(Row => {
+                    tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4 font-medium">${Row.nama_mapel}</td>
+                        <td class="p-4 text-right font-serif text-lg">${Row.nama_arab || '-'}</td>
+                        <td class="p-4"><span class="bg-gray-100 px-2 py-1 rounded text-xs">${Row.kategori || '-'}</span></td>
+                        <td class="p-4 text-center"><button onclick="deleteData(${Row.id})" class="text-red-500 hover:text-red-700 font-bold">Hapus</button></td>
+                    </tr>`;
+                });
+            } else { // Guru
+                thead.innerHTML = '<th class="p-4">Nama Guru</th><th class="p-4">NIP</th><th class="p-4 text-center">Aksi</th>';
+                data.forEach(Row => {
+                    tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4 font-medium">${Row.nama_lengkap}</td>
+                        <td class="p-4 text-slate-500">${Row.nip || '-'}</td>
+                        <td class="p-4 text-center"><button onclick="deleteData(${Row.id})" class="text-red-500 hover:text-red-700 font-bold">Hapus</button></td>
+                    </tr>`;
+                });
+            }
+        }
+
+        // --- 3. ADD DATA (MODAL) ---
+        function openModal() {
+            document.getElementById('modalAdd').classList.remove('hidden');
+            document.getElementById('modalAdd').classList.add('flex');
+            const form = document.getElementById('modalForm');
+            form.innerHTML = '';
+
+            const inputClass = "w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none";
+
+            if(activeTab === 'siswa') {
+                form.innerHTML = `
+                    <input id="inp1" placeholder="Nama Lengkap" class="${inputClass}">
+                    <input id="inp2" placeholder="NISN" class="${inputClass}">
+                    <input id="inp3" placeholder="Kelas (Contoh: 10A)" value="10A" class="${inputClass}">`;
+            } else if(activeTab === 'mapel') {
+                form.innerHTML = `
+                    <input id="inp1" placeholder="Nama Mapel (Indo)" class="${inputClass}">
+                    <input id="inp2" placeholder="Nama Arab (Contoh: الفقه)" class="${inputClass}" dir="rtl">
+                    <select id="inp3" class="${inputClass}">
+                        <option value="Tulis">Tulis</option>
+                        <option value="Lisan">Lisan</option>
+                        <option value="Tahfidz">Tahfidz</option>
+                    </select>`;
+            } else {
+                form.innerHTML = `
+                    <input id="inp1" placeholder="Nama Guru" class="${inputClass}">
+                    <input id="inp2" placeholder="NIP" class="${inputClass}">`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modalAdd').classList.add('hidden');
+            document.getElementById('modalAdd').classList.remove('flex');
+        }
+
+        async function saveData() {
+            const v1 = document.getElementById('inp1').value;
+            const v2 = document.getElementById('inp2').value;
+            
+            let payload = {};
+            if(activeTab === 'siswa') payload = { nama: v1, nisn: v2, kelas: document.getElementById('inp3').value };
+            else if(activeTab === 'mapel') payload = { nama_mapel: v1, nama_arab: v2, kategori: document.getElementById('inp3').value };
+            else payload = { nama_lengkap: v1, nip: v2 };
+
+            if(!v1) return alert("Nama wajib diisi!");
+
+            const { error } = await db.from(activeTab).insert([payload]);
+            if(error) alert("Gagal: " + error.message);
+            else { closeModal(); loadTable(); }
+        }
+
+        // --- 4. DELETE DATA ---
+        async function deleteData(id) {
+            if(!confirm("Yakin hapus data ini? Data nilai yang terkait mungkin akan hilang/error!")) return;
+            
+            // Hapus data terkait di tabel nilai/catatan dulu (Manual Cascade) biar bersih
+            if(activeTab === 'siswa') {
+                await db.from('nilai').delete().eq('siswa_id', id);
+                await db.from('catatan_wali').delete().eq('siswa_id', id);
+            } else if (activeTab === 'mapel') {
+                await db.from('nilai').delete().eq('mapel_id', id);
+            }
+
+            const { error } = await db.from(activeTab).delete().eq('id', id);
+            if(error) alert("Gagal hapus: " + error.message);
+            else loadTable();
+        }
+
+        function filterTable() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = currentData.filter(item => {
+                return Object.values(item).some(val => String(val).toLowerCase().includes(term));
+            });
+            renderTable(filtered);
+        }
+
+        // Initial Load
+        switchTab('siswa');
+    </script>
+</body>
+</html>
